@@ -3,17 +3,33 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import platform
+import matplotlib.font_manager as fm
+import os
 
-# 한글 폰트 설정 (환경에 따라 다름)
+# =============================
+# 폰트 설정 함수 (로컬 & 서버 공용)
+# =============================
 def set_korean_font():
-    if platform.system() == 'Darwin': # 맥
-        plt.rc('font', family='AppleGothic')
-    elif platform.system() == 'Windows': # 윈도우
-        plt.rc('font', family='Malgun Gothic')
+    # 1. Streamlit Cloud(Linux) 환경을 위한 나눔 폰트 경로 설정
+    linux_font_path = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf'
+    
+    if os.path.exists(linux_font_path):
+        # 서버 환경: 설치된 나눔고딕 사용
+        font_prop = fm.FontProperties(fname=linux_font_path)
+        plt.rc('font', family=font_prop.get_name())
+    else:
+        # 로컬 환경: 윈도우 또는 맥 폰트 설정
+        if platform.system() == 'Darwin': # 맥
+            plt.rc('font', family='AppleGothic')
+        elif platform.system() == 'Windows': # 윈도우
+            plt.rc('font', family='Malgun Gothic')
+            
+    # 마이너스 기호 깨짐 방지
     plt.rcParams['axes.unicode_minus'] = False
 
 set_korean_font()
 
+# 앱 기본 설정
 st.set_page_config(page_title="국세청 근로소득 분석", layout="wide")
 st.title("📂 국세청 근로소득 데이터 분석기")
 
@@ -23,8 +39,7 @@ st.title("📂 국세청 근로소득 데이터 분석기")
 file_path = "data/국세청_근로소득 백분위(천분위) 자료_20241231.csv"
 
 try:
-    # 1️⃣ CSV 파일 읽기
-    # 데이터에 콤마(,)가 포함된 숫자가 있을 수 있으므로 thousands=',' 옵션을 추가하면 편리합니다.
+    # CSV 파일 읽기 (콤마 제거 포함)
     df = pd.read_csv(file_path, encoding="cp949", thousands=',')
     st.success("✅ 데이터를 성공적으로 불러왔습니다!")
 
@@ -35,7 +50,7 @@ try:
     
     with col1:
         st.subheader("📊 데이터 요약")
-        st.write(f"전체 행 수: {df.shape[0]} | 전체 열 수: {df.shape[1]}")
+        st.write(f"전체 행 수: **{df.shape[0]}** | 전체 열 수: **{df.shape[1]}**")
         st.dataframe(df.head(10))
 
     with col2:
@@ -53,20 +68,22 @@ try:
     else:
         st.subheader("📈 데이터 분포 시각화")
         
-        # 2️⃣ Selectbox 수정: options 인자 전달
         selected_col = st.selectbox("분석할 항목을 선택하세요:", options=numeric_cols)
 
         # 그래프 그리기
         fig, ax = plt.subplots(figsize=(10, 5))
         sns.histplot(df[selected_col], kde=True, ax=ax, color='skyblue')
-        plt.title(f"[{selected_col}] 분포도")
-        plt.xlabel(selected_col)
-        plt.ylabel("빈도수")
         
+        # 제목 및 라벨 설정
+        ax.set_title(f"[{selected_col}] 분포도", fontsize=15)
+        ax.set_xlabel(selected_col)
+        ax.set_ylabel("빈도수")
+        
+        # 화면 출력
         st.pyplot(fig)
 
         # 상세 데이터 표
-        with st.expander("선택한 항목 상세 데이터 보기"):
+        with st.expander(f"📌 {selected_col} 상세 데이터 보기 (내림차순)"):
             st.write(df[[selected_col]].sort_values(by=selected_col, ascending=False))
 
 except FileNotFoundError:
