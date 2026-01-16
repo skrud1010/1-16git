@@ -6,32 +6,35 @@ import platform
 import matplotlib.font_manager as fm
 import os
 
-# =============================
-# 글꼴 파일 경로 설정 (이미지 구조 반영)
-# =============================
-def set_korean_font():
-    # 현재 실행 중인 app.py와 같은 폴더에 있는 NanumGothic.ttf 경로 탐색
-    font_file = "NanumGothic.ttf"
+# -----------------------------------------------------------------------------------
+# 한글 폰트 설정 (더 강력한 버전)
+# -----------------------------------------------------------------------------------
+system_name = platform.system()
+
+if system_name == 'Windows':
+    # 윈도우
+    plt.rc('font', family='Malgun Gothic') 
+elif system_name == 'Darwin':
+    # 맥
+    plt.rc('font', family='AppleGothic') 
+else:
+    # 리눅스 (Streamlit Cloud)
+    # 폰트 파일 경로 지정
+    path = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf'
     
-    if os.path.exists(font_file):
-        # 1. 파일이 있으면 직접 해당 폰트 등록
-        font_prop = fm.FontProperties(fname=font_file)
-        plt.rc('font', family=font_prop.get_name())
-        # Streamlit용 폰트 정보 저장
-        st.session_state['font_name'] = font_prop.get_name()
+    # 해당 경로에 폰트 파일이 있는지 확인
+    if os.path.exists(path):
+        # 1. 폰트 매니저에 폰트 추가 (이게 핵심!)
+        fm.fontManager.addfont(path)
+        
+        # 2. 추가된 폰트의 이름을 가져와서 설정
+        font_name = fm.FontProperties(fname=path).get_name()
+        plt.rc('font', family=font_name)
     else:
-        # 2. 파일이 없을 경우 로컬 시스템 폰트 사용 (예외 처리)
-        if platform.system() == 'Darwin':
-            plt.rc('font', family='AppleGothic')
-        elif platform.system() == 'Windows':
-            plt.rc('font', family='Malgun Gothic')
-            
-    # 마이너스 기호 깨짐 방지
-    plt.rcParams['axes.unicode_minus'] = False
+        # 폰트가 설치되지 않았을 경우 에러 메시지 출력 (디버깅용)
+        st.error("⚠️ 한글 폰트 파일이 없습니다. packages.txt를 확인해주세요.")
 
-set_korean_font()
-
-st.set_page_config(page_title="국세청 근로소득 분석", layout="wide")
+plt.rc('axes', unicode_minus=False) # 마이너스 기호 깨짐 방지
 st.title("📂 국세청 근로소득 데이터 분석기")
 
 # =============================
