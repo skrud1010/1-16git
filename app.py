@@ -2,49 +2,50 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
 import platform
+import matplotlib.font_manager as fm
 import os
-from matplotlib import font_manager, rc
 
-# 1. 한글 폰트 강제 설정 (NanumGothic.ttf 사용)
-@st.cache_resource
-def setup_font():
+# =============================
+# 글꼴 파일 경로 설정 (이미지 구조 반영)
+# =============================
+def set_korean_font():
+    # 현재 실행 중인 app.py와 같은 폴더에 있는 NanumGothic.ttf 경로 탐색
     font_file = "NanumGothic.ttf"
     
-    # 1순위: 같은 폴더에 NanumGothic.ttf가 있는지 확인
     if os.path.exists(font_file):
-        font_name = font_manager.FontProperties(fname=font_file).get_name()
-        rc('font', family=font_name)
+        # 1. 파일이 있으면 직접 해당 폰트 등록
+        font_prop = fm.FontProperties(fname=font_file)
+        plt.rc('font', family=font_prop.get_name())
+        # Streamlit용 폰트 정보 저장
+        st.session_state['font_name'] = font_prop.get_name()
     else:
-        # 2순위: 파일이 없을 경우 OS별 기본 한글 폰트 사용
-        if platform.system() == 'Windows':
-            rc('font', family='Malgun Gothic')
-        elif platform.system() == 'Darwin': # Mac
-            rc('font', family='AppleGothic')
-        else: # Linux/Streamlit Cloud
-            rc('font', family='NanumGothic')
+        # 2. 파일이 없을 경우 로컬 시스템 폰트 사용 (예외 처리)
+        if platform.system() == 'Darwin':
+            plt.rc('font', family='AppleGothic')
+        elif platform.system() == 'Windows':
+            plt.rc('font', family='Malgun Gothic')
             
-    plt.rcParams['axes.unicode_minus'] = False # 마이너스 기호 깨짐 방지
+    # 마이너스 기호 깨짐 방지
+    plt.rcParams['axes.unicode_minus'] = False
 
-setup_font()
+set_korean_font()
 
-st.set_page_config(page_title="국세청 근로소득 분석기", layout="wide")
-st.title("📊 국세청 근로소득 데이터 분석기")
+st.set_page_config(page_title="국세청 근로소득 분석", layout="wide")
+st.title("📂 국세청 근로소득 데이터 분석기")
 
-# 데이터 불러오기
-file_path = "국세청_근로소득 백분위(천분위) 자료_20241231.csv"
+# =============================
+# 데이터 불러오기 (이미지의 load_data 로직 반영)
+# =============================
+file_path = "data/국세청_근로소득 백분위(천분위) 자료_20241231.csv"
 
-# 2. 인코딩 에러 방지를 위한 다중 로드 시도
 def load_data(path):
-    # 'utf-8-sig'를 가장 먼저 시도 (이미지에서 성공했던 인코딩)
     encodings = ['utf-8-sig', 'cp949', 'euc-kr', 'utf-8']
-    for encoding in encodings:
+    for enc in encodings:
         try:
-            df = pd.read_csv(path, encoding=encoding)
-            # 컬럼명 앞뒤 공백 제거 (매우 중요)
-            df.columns = df.columns.str.strip()
-            return df, encoding
+            df = pd.read_csv(path, encoding=enc, thousands=',')
+            df.columns = df.columns.str.strip() # 컬럼명 공백 제거
+            return df, enc
         except (UnicodeDecodeError, FileNotFoundError):
             continue
     return None, None
@@ -55,49 +56,41 @@ try:
     if df is not None:
         st.success(f"✅ 데이터를 성공적으로 불러왔습니다! (인코딩: {used_encoding})")
 
-        # 상단 요약 정보 (Metrics)
-        col_m1, col_m2 = st.columns(2)
-        col_m1.metric("전체 데이터 수", f"{len(df):,}")
-        col_m2.metric("분석 가능 항목 수", len(df.select_dtypes(include=[np.number]).columns))
+        # 상단 요약 정보
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("📊 데이터 요약")
+            st.dataframe(df.head(10))
+        with col2:
+            st.subheader("📋 기초 통계")
+            st.write(df.describe())
 
-        # 데이터 미리 보기
-        with st.expander("📝 데이터 원본 보기", expanded=False):
-            st.dataframe(df, use_container_width=True)
-
+        # 시각화 섹션
         st.divider()
+        numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
 
-        # 3. 데이터 시각화 섹션
-        st.subheader("📈 항목별 분포 시각화")
-        
-        # 수치형 데이터만 추출
-        numeric_columns = df.select_dtypes(include=['number']).columns.tolist()
+        if numeric_cols:
+            st.subheader("📈 데이터 분포 시각화")
+            selected_col = st.selectbox("분석할 항목을 선택하세요:", options=numeric_cols)
 
-        if numeric_columns:
-            # 설정 레이아웃
-            c1, c2 = st.columns([1, 3])
+            # 그래프 생성
+            fig, ax = plt.subplots(figsize=(10, 5))
+            sns.histplot(df[selected_col], kde=True, ax=ax, color='skyblue')
             
-            with c1:
-                st.info("그래프 설정을 조절하세요.")
-                selected_col = st.selectbox("분석할 항목 선택:", numeric_columns)
-                bins = st.slider("막대 세밀도(Bins):", 5, 100, 30)
-                graph_color = st.color_picker("그래프 색상:", "#6C63FF")
-                show_kde = st.checkbox("밀도 곡선(KDE) 표시", value=True)
-
-            with c2:
-                # 그래프 그리기
-                fig, ax = plt.subplots(figsize=(10, 6))
-                # NaN 값이 있을 경우 히스토그램에서 에러가 날 수 있으므로 dropna() 적용
-                sns.histplot(df[selected_col].dropna(), bins=bins, kde=show_kde, ax=ax, color=graph_color)
-                
-                ax.set_title(f"<{selected_col}> 분포도", fontsize=16, pad=20)
-                ax.set_xlabel(selected_col, fontsize=12)
-                ax.set_ylabel("빈도수", fontsize=12)
-                st.pyplot(fig)
+            # 그래프 내 한글 적용 확인용 설정
+            ax.set_title(f"[{selected_col}] 분포도", fontsize=16)
+            ax.set_xlabel(selected_col)
+            ax.set_ylabel("빈도수")
+            
+            st.pyplot(fig)
+            
+            with st.expander("상세 데이터 보기"):
+                st.write(df[[selected_col]].sort_values(by=selected_col, ascending=False))
         else:
-            st.warning("분석할 수 있는 숫자형 데이터가 없습니다.")
-
+            st.warning("분석할 숫자형 데이터가 없습니다.")
+            
     else:
-        st.error(f"❌ '{file_path}' 파일을 찾을 수 없거나 인코딩이 맞지 않습니다.")
+        st.error(f"❌ 파일을 불러올 수 없습니다. 경로를 확인하세요: {file_path}")
 
 except Exception as e:
-    st.error(f"❌ 예기치 못한 에러가 발생했습니다: {e}")
+    st.error(f"❌ 오류 발생: {e}")
